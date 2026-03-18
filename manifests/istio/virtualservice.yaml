@@ -1,0 +1,25 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: blue-green-cell
+  namespace: istio-system
+spec:
+  hosts:
+  - blue-green-cell.local
+  gateways:
+  - blue-green-cell-gateway
+  http:
+  - name: primary-route
+    route:
+    - destination:
+        host: blue-green-cell.app.svc.cluster.local
+        subset: stable
+        port:
+          number: 80
+      weight: 100
+    - destination:
+        host: blue-green-cell.app.svc.cluster.local
+        subset: candidate
+        port:
+          number: 80
+      weight: 0

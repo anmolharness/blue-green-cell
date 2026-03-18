@@ -1,0 +1,82 @@
+pipeline:
+  name: blue-green-cell
+  identifier: blue_green_cell
+  projectIdentifier: default
+  orgIdentifier: default
+  tags: {}
+  stages:
+  - stage:
+      name: Deploy Candidate
+      identifier: deploy_candidate
+      type: Deployment
+      spec:
+        deploymentType: Kubernetes
+        service:
+          serviceRef: blue_green_cell
+        environment:
+          environmentRef: app
+          deployToAll: false
+          infrastructureDefinitions:
+          - identifier: app
+        execution:
+          steps:
+          - step:
+              type: K8sApply
+              name: Apply Candidate
+              identifier: apply_candidate
+              spec:
+                filePaths:
+                - manifests/candidate.yaml
+                skipDryRun: false
+                skipSteadyStateCheck: false
+          - step:
+              type: K8sTrafficRouting
+              name: Shift 10 Percent
+              identifier: shift_10_percent
+              timeout: 10m
+              spec:
+                providerType: Istio
+                destinations:
+                - host: blue-green-cell.app.svc.cluster.local
+                  subsetName: stable
+                  weight: 90
+                - host: blue-green-cell.app.svc.cluster.local
+                  subsetName: candidate
+                  weight: 10
+                routes:
+                - route:
+                    type: http
+                    httpRoute:
+                      routeName: primary-route
+                rootRoutes:
+                - blue-green-cell
+          - step:
+              type: Verify
+              name: Verify Candidate
+              identifier: verify_candidate
+              timeout: 10m
+              spec:
+                type: Canary
+                monitoredService:
+                  identifier: blue_green_cell
+          - step:
+              type: K8sTrafficRouting
+              name: Shift 100 Percent
+              identifier: shift_100_percent
+              timeout: 10m
+              spec:
+                providerType: Istio
+                destinations:
+                - host: blue-green-cell.app.svc.cluster.local
+                  subsetName: stable
+                  weight: 0
+                - host: blue-green-cell.app.svc.cluster.local
+                  subsetName: candidate
+                  weight: 100
+                routes:
+                - route:
+                    type: http
+                    httpRoute:
+                      routeName: primary-route
+                rootRoutes:
+                - blue-green-cell

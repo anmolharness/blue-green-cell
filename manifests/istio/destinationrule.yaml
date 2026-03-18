@@ -1,0 +1,14 @@
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: blue-green-cell
+  namespace: istio-system
+spec:
+  host: blue-green-cell.app.svc.cluster.local
+  subsets:
+  - name: stable
+    labels:
+      release-track: stable
+  - name: candidate
+    labels:
+      release-track: candidate
