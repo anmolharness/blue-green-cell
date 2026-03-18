@@ -1,0 +1,63 @@
+pipeline:
+  name: blue-green-cell-patch-git-min
+  identifier: blue_green_cell_patch_git_min
+  projectIdentifier: default
+  orgIdentifier: default
+  tags: {}
+  stages:
+    - stage:
+        name: deploy-candidate
+        identifier: deploy_candidate
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: account.blue_green_cell_proj
+          environment:
+            environmentRef: istiodemo
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: app
+          execution:
+            steps:
+              - step:
+                  name: Rollout Candidate
+                  identifier: rollout_candidate
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+              - step:
+                  type: K8sPatch
+                  name: Shift 10 Percent
+                  identifier: shift_10_percent
+                  timeout: 10m
+                  spec:
+                    workload: app/VirtualService/blue-green-cell-harness
+                    source:
+                      type: Git
+                      spec:
+                        connectorRef: account.anmolgithub
+                        gitFetchType: Branch
+                        repoName: blue-green-cell
+                        branch: main
+                        paths:
+                          - harness/patches/shift-10.yaml
+                    recordChangeCause: true
+                    mergeStrategyType: Json
+                    skipSteadyStateCheck: true
+            rollbackSteps:
+              - step:
+                  name: Rollback Candidate
+                  identifier: rollback_candidate
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
