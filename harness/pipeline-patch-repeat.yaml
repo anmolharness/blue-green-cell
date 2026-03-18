@@ -1,0 +1,109 @@
+pipeline:
+  name: blue-green-cell-patch-repeat
+  identifier: blue_green_cell_patch_repeat
+  projectIdentifier: default
+  orgIdentifier: default
+  tags: {}
+  stages:
+    - stage:
+        name: deploy-candidate
+        identifier: deploy_candidate
+        description: ""
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: account.blue_green_cell_proj
+          environment:
+            environmentRef: istiodemo
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: app
+          execution:
+            steps:
+              - step:
+                  name: Rollout Candidate
+                  identifier: rollout_candidate
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+                    pruningEnabled: false
+              - stepGroup:
+                  name: Progressive Shift
+                  identifier: progressive_shift
+                  strategy:
+                    repeat:
+                      items:
+                        - "10"
+                        - "25"
+                        - "50"
+                        - "75"
+                        - "100"
+                      maxConcurrency: 1
+                      nodeName: Shift_<+repeat.item>
+                  steps:
+                    - step:
+                        type: K8sPatch
+                        name: Shift Percent
+                        identifier: shift_percent
+                        timeout: 10m
+                        spec:
+                          workload: app/VirtualService/blue-green-cell-harness
+                          source:
+                            type: Git
+                            spec:
+                              connectorRef: account.anmolgithub
+                              gitFetchType: Branch
+                              repoName: blue-green-cell
+                              branch: main
+                              paths:
+                                - harness/patches/shift-template.yaml
+                          recordChangeCause: true
+                          mergeStrategyType: Json
+                          skipSteadyStateCheck: true
+                    - step:
+                        type: Verify
+                        name: Verify Candidate
+                        identifier: verify_candidate
+                        timeout: 15m
+                        spec:
+                          type: Canary
+                          spec:
+                            sensitivity: MEDIUM
+                            duration: 1m
+                            deploymentTag: <+serviceConfig.artifacts.primary.tag>
+                        when:
+                          stageStatus: Success
+                          condition: <+repeat.item> != "100"
+                        failureStrategies:
+                          - onFailure:
+                              errors:
+                                - Verification
+                              action:
+                                type: StageRollback
+                          - onFailure:
+                              errors:
+                                - Unknown
+                              action:
+                                type: ManualIntervention
+                                spec:
+                                  timeout: 1h
+                                  onTimeout:
+                                    action:
+                                      type: Ignore
+            rollbackSteps:
+              - step:
+                  name: Rollback Candidate
+                  identifier: rollback_candidate
+                  type: K8sRollingRollback
+                  timeout: 10m
+                  spec:
+                    pruningEnabled: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
