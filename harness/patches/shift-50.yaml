@@ -1,0 +1,9 @@
+- op: replace
+  path: /spec/http/0/route
+  value:
+    - destination:
+        host: blue-green-cell-stable.app.svc.cluster.local
+      weight: 50
+    - destination:
+        host: blue-green-cell-candidate.app.svc.cluster.local
+      weight: 50
